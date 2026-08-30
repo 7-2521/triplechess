@@ -1,0 +1,34 @@
+Triple Chess
+Copyright (C) 2026
+
+This program is free software: you can redistribute it and/or modify it under the
+terms of the GNU General Public License as published by the Free Software
+Foundation, either version 3 of the License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE. See the GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License along with this
+program. If not, see <https://www.gnu.org/licenses/>.
+
+--------------------------------------------------------------------------------
+
+NOTE: this file carries the GPL-3.0 notice but not the full license text. Before
+publishing or distributing this project, replace everything above with the complete
+GPL-3.0 text from https://www.gnu.org/licenses/gpl-3.0.txt
+
+Why GPL: the client bundle embeds chessground (lichess.org's board UI and cburnett
+piece set), which is GPL-3.0-or-later, so the combined work is GPL-3.0-or-later.
+
+--------------------------------------------------------------------------------
+
+Third-party components:
+
+  chessground  — GPL-3.0-or-later — https://github.com/lichess-org/chessground
+                 Board rendering, drag/drop, and the cburnett piece set.
+  chess.js     — BSD-2-Clause     — https://github.com/jhlywa/chess.js
+                 Move generation, validation, and game-end detection.
+  express      — MIT              — https://github.com/expressjs/express
+  ws           — MIT              — https://github.com/websockets/ws
+  esbuild      — MIT              — https://github.com/evanw/esbuild

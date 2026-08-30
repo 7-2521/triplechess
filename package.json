@@ -1,0 +1,26 @@
+{
+  "name": "triplechess",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Triple Chess - online chess where each player has three rotating clocks",
+  "type": "module",
+  "main": "src/server/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "start": "node src/server/index.js",
+    "dev": "node build.js --watch",
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "@lichess-org/chessground": "^10.1.1",
+    "chess.js": "^1.4.0",
+    "express": "^5.2.1",
+    "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}

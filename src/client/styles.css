@@ -1,0 +1,856 @@
+/* ---------------------------------------------------------------------------
+   Triple Chess — application styles.
+   Board and piece art come from chessground (imported before this file), so
+   anything here that touches .cg-wrap is a deliberate override.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --bg: #161513;
+  --bg-raised: #1f1e1c;
+  --bg-sunken: #12110f;
+  --line: #2f2d2a;
+  --line-soft: #272522;
+  --text: #d8d5cf;
+  --text-dim: #8f8b83;
+  --text-bright: #f4f2ee;
+  --accent: #7fa650;
+  --accent-dim: #62813d;
+  --warn: #d98d3a;
+  --danger: #b8493f;
+  --radius: 6px;
+  --font: 'Segoe UI', Roboto, -apple-system, BlinkMacSystemFont, Helvetica, Arial, sans-serif;
+  --mono: 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  margin: 0;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+a {
+  color: inherit;
+}
+
+/* --- shared controls ----------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 9px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-raised);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.btn:hover:not(:disabled) {
+  background: #2a2825;
+  border-color: #3c3934;
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn-sm {
+  padding: 7px 11px;
+  font-size: 13px;
+}
+
+.btn-primary {
+  background: var(--accent-dim);
+  border-color: var(--accent-dim);
+  color: #fff;
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  color: #e8837a;
+}
+
+.btn.is-armed {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+.btn.is-off {
+  opacity: 0.55;
+}
+
+input[type='text'],
+input[type='number'] {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text-bright);
+  font: inherit;
+  font-size: 14px;
+}
+
+input:focus-visible,
+button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.brand {
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-bright);
+  text-decoration: none;
+}
+
+.brand span {
+  color: var(--accent);
+}
+
+.brand-sm {
+  font-size: 19px;
+}
+
+/* --- lobby --------------------------------------------------------------- */
+
+.lobby {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 20px 80px;
+}
+
+.lobby-head {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.tagline {
+  margin: 10px auto 0;
+  max-width: 520px;
+  color: var(--text-dim);
+}
+
+.panel {
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 20px;
+  margin-bottom: 18px;
+}
+
+.panel h2 {
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 12px;
+}
+
+.panel-note {
+  margin: -4px 0 16px;
+  font-size: 13.5px;
+  color: var(--text-dim);
+}
+
+.preset-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.preset {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.preset:hover {
+  border-color: #3c3934;
+}
+
+.preset.is-on {
+  border-color: var(--accent);
+  background: #23281a;
+}
+
+.preset strong {
+  font-size: 14px;
+  color: var(--text-bright);
+}
+
+.preset-specs {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.preset-hint {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.clock-editor {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.clock-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  padding: 14px;
+}
+
+.clock-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.clock-card-title {
+  font-weight: 600;
+  color: var(--text-bright);
+  font-size: 14px;
+}
+
+.clock-card-summary {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.clock-card label {
+  display: block;
+  margin-bottom: 10px;
+}
+
+.clock-card label span {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.clock-card label:last-child {
+  margin-bottom: 0;
+}
+
+.clock-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 19px;
+  height: 19px;
+  flex: none;
+  border-radius: 4px;
+  background: #33312d;
+  color: var(--text-dim);
+  font-size: 11px;
+  font-weight: 700;
+  font-family: var(--mono);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 8px 18px;
+  border: 0;
+  background: var(--bg-sunken);
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.segmented button + button {
+  border-left: 1px solid var(--line);
+}
+
+.segmented button.is-on {
+  background: var(--accent-dim);
+  color: #fff;
+  font-weight: 600;
+}
+
+.lobby-actions {
+  text-align: center;
+  margin: 26px 0;
+}
+
+.lobby-actions .btn-primary {
+  padding: 12px 40px;
+  font-size: 16px;
+}
+
+.hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.join-row {
+  display: flex;
+  gap: 8px;
+}
+
+.lobby-error {
+  padding: 10px 14px;
+  border: 1px solid var(--danger);
+  border-radius: var(--radius);
+  color: #e8837a;
+  text-align: center;
+}
+
+/* --- game layout --------------------------------------------------------- */
+
+.game {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 24px;
+  align-items: start;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 22px 20px 40px;
+}
+
+.board-column {
+  display: flex;
+  justify-content: center;
+}
+
+.board-wrap {
+  position: relative;
+  width: min(100%, calc(100vh - 90px));
+}
+
+.board {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 2px 20px rgb(0 0 0 / 45%);
+}
+
+/* --- promotion picker ---------------------------------------------------- */
+
+.promotion-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  pointer-events: none;
+}
+
+.promotion-layer.is-open {
+  pointer-events: auto;
+}
+
+.promotion-layer:not(.is-open) {
+  display: none;
+}
+
+.promotion-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0 0 0 / 55%);
+}
+
+.promotion-choice {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: #f0f0ee;
+  box-shadow: 0 0 0 3px #12110f;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.promotion-choice:hover {
+  background: var(--accent);
+}
+
+/* Override chessground's 12.5%-of-board piece sizing: here the button is the square. */
+.promotion-layer .promotion-choice piece {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* --- board overlay (share link / game over) ------------------------------ */
+
+.board-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgb(12 11 10 / 72%);
+  backdrop-filter: blur(2px);
+  border-radius: 4px;
+}
+
+.board-overlay[hidden] {
+  display: none;
+}
+
+.overlay-card {
+  width: min(100%, 380px);
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg-raised);
+  text-align: center;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 55%);
+}
+
+.overlay-card h3 {
+  font-size: 20px;
+  margin-bottom: 6px;
+}
+
+.overlay-note {
+  margin: 6px 0 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.overlay-card .btn {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.share-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+}
+
+.share-row input {
+  font-family: var(--mono);
+  font-size: 12.5px;
+}
+
+.share-row .btn {
+  width: auto;
+  margin-top: 0;
+  flex: none;
+}
+
+/* --- sidebar ------------------------------------------------------------- */
+
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-raised);
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.conn {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.conn::before {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  vertical-align: middle;
+}
+
+.conn[data-status='online']::before {
+  background: var(--accent);
+}
+
+.conn[data-status='offline']::before {
+  background: var(--danger);
+}
+
+.player-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 0 2px 4px;
+}
+
+.player-name {
+  font-weight: 600;
+  color: var(--text-bright);
+  font-size: 14px;
+}
+
+.presence {
+  font-size: 11.5px;
+  color: var(--text-dim);
+}
+
+.presence[data-state='online'] {
+  color: var(--accent);
+}
+
+.presence[data-state='away'] {
+  color: var(--warn);
+}
+
+/* --- the three clocks ---------------------------------------------------- */
+
+.clock-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.clock-row {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 11px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  overflow: hidden;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+  opacity: 0.55;
+}
+
+.clock-label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.clock-spec {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.clock-time {
+  font-family: var(--mono);
+  font-size: 20px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+  color: var(--text);
+}
+
+.clock-bar {
+  grid-column: 1 / -1;
+  height: 2px;
+  margin-top: 5px;
+  border-radius: 2px;
+  background: #2a2825;
+  overflow: hidden;
+}
+
+.clock-bar-fill {
+  height: 100%;
+  background: #4a4740;
+  transition: width 0.25s linear;
+}
+
+/* The clock this player is currently on. */
+.clock-row.is-active {
+  opacity: 1;
+  border-color: var(--line);
+  background: #26241f;
+}
+
+.clock-row.is-active .clock-badge {
+  background: var(--accent-dim);
+  color: #fff;
+}
+
+.clock-row.is-active .clock-time {
+  color: var(--text-bright);
+}
+
+/* ...and it is actually ticking right now. */
+.clock-row.is-running {
+  border-color: var(--accent);
+  background: #2b3020;
+  box-shadow: 0 0 0 1px rgb(127 166 80 / 25%);
+}
+
+.clock-row.is-running .clock-bar-fill {
+  background: var(--accent);
+}
+
+.clock-row.is-low {
+  border-color: var(--danger);
+  background: #331d1b;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.clock-row.is-low .clock-time {
+  color: #ff9a8f;
+}
+
+.clock-row.is-low .clock-bar-fill {
+  background: var(--danger);
+}
+
+.clock-row.is-out .clock-time {
+  color: var(--danger);
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgb(184 73 63 / 30%);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgb(184 73 63 / 12%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .clock-row.is-low {
+    animation: none;
+  }
+}
+
+/* --- status + moves ------------------------------------------------------ */
+
+.status-bar {
+  padding: 9px 12px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 13.5px;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.status-bar[data-tone='you'] {
+  color: var(--text-bright);
+  background: #26301c;
+}
+
+.status-bar[data-tone='done'] {
+  color: var(--text-bright);
+  font-weight: 600;
+}
+
+.status-bar[data-tone='error'] {
+  color: #e8837a;
+  background: #2e1c1a;
+}
+
+.moves {
+  flex: 1;
+  min-height: 150px;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  font-size: 13.5px;
+  scrollbar-width: thin;
+}
+
+.moves-empty {
+  margin: 0;
+  padding: 8px;
+  color: var(--text-dim);
+  font-size: 13px;
+  text-align: center;
+}
+
+.move-row {
+  display: grid;
+  grid-template-columns: 30px 1fr 1fr;
+  align-items: center;
+}
+
+.move-row:nth-child(odd) {
+  background: rgb(255 255 255 / 2%);
+}
+
+.move-no {
+  padding-left: 4px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.move {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 5px;
+  min-height: 22px;
+}
+
+.move-san {
+  font-weight: 500;
+  color: var(--text);
+}
+
+/* Which of the three clocks paid for this move. */
+.move-clock {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 3px;
+  background: #2f2d29;
+  color: var(--text-dim);
+}
+
+.prompt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #2a2620;
+  font-size: 13px;
+}
+
+.prompt[hidden] {
+  display: none;
+}
+
+.prompt-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.controls {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.controls[hidden] {
+  display: none;
+}
+
+.fatal {
+  max-width: 460px;
+  margin: 100px auto;
+  text-align: center;
+}
+
+.fatal h2 {
+  margin-bottom: 18px;
+  font-size: 20px;
+}
+
+/* --- responsive ---------------------------------------------------------- */
+
+@media (max-width: 940px) {
+  .game {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 16px;
+    padding: 14px 12px 32px;
+  }
+
+  .board-wrap {
+    width: min(100%, 78vh);
+    margin: 0 auto;
+  }
+
+  .moves {
+    max-height: 180px;
+  }
+}
+
+@media (max-width: 520px) {
+  .lobby {
+    padding: 28px 14px 60px;
+  }
+
+  .clock-time {
+    font-size: 18px;
+  }
+}
