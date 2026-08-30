@@ -110,8 +110,10 @@ export function renderGame(root, gameId) {
 
   // --- wiring --------------------------------------------------------------
   function assignStacks() {
-    const bottomColor = orientation;
-    const topColor = other(bottomColor);
+    // Your own clocks always sit above the move list, whichever colour you are
+    // and whichever way the board is facing. Spectators get board order.
+    const topColor = myColor ?? other(orientation);
+    const bottomColor = other(topColor);
     stacks.top.color = topColor;
     stacks.top.root.dataset.color = topColor;
     stacks.bottom.color = bottomColor;

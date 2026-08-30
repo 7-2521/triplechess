@@ -47,11 +47,15 @@ export class BoardView {
         showDests: true,
         events: { after: (orig, dest) => this.handleUserMove(orig, dest) },
       },
+      premovable: { enabled: true, showDests: true, castle: true },
       draggable: { showGhost: true },
       highlight: { lastMove: true, check: true },
       animation: { enabled: true, duration: 180 },
       drawable: { enabled: true },
     });
+    // The board is sized from the viewport, so it changes size when the window
+    // does. chessground observes its own wrapper and re-measures, so there is
+    // nothing to wire up here.
   }
 
   setOrientation(color) {
@@ -72,8 +76,12 @@ export class BoardView {
     this.chess.load(state.fen);
     this.cancelPromotion();
 
-    const myTurn = state.status === 'active' && myColor && state.turn === myColor;
+    const playing = Boolean(myColor) && state.status === 'active';
+    const myTurn = playing && state.turn === myColor;
 
+    // `movable.color` stays set to our colour even when it is not our turn —
+    // that is what lets chessground accept premoves. Real moves are gated by
+    // `dests`, which is empty until the turn is actually ours.
     this.ground.set({
       fen: state.fen,
       turnColor: state.turn,
@@ -81,14 +89,24 @@ export class BoardView {
       check: state.check ?? false,
       movable: {
         free: false,
-        color: myTurn ? myColor : undefined,
+        color: playing ? myColor : undefined,
         dests: myTurn ? computeDests(this.chess) : new Map(),
         showDests: true,
       },
-      draggable: { enabled: Boolean(myTurn) },
-      selectable: { enabled: Boolean(myTurn) },
+      premovable: { enabled: playing, showDests: true, castle: true },
+      draggable: { enabled: playing },
+      selectable: { enabled: playing },
       viewOnly: state.status === 'finished' && !myColor,
     });
+
+    if (!playing) {
+      this.ground.cancelPremove();
+    } else if (myTurn) {
+      // Our turn came around: fire any queued premove. chessground validates it
+      // against the legal moves we just set and drops it if it no longer works,
+      // so a premove that the opponent's move invalidated simply disappears.
+      this.ground.playPremove();
+    }
   }
 
   handleUserMove(orig, dest) {

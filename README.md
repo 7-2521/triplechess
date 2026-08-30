@@ -9,7 +9,17 @@ increment for the whole game. With the default `15+0 / 3+2 / 1+0`, every third m
 is effectively a bullet move while the rest of the game stays slow.
 
 The clock you are currently on is highlighted in the sidebar, and it glows green
-while it is actually ticking.
+while it is actually ticking. Your own three clocks always sit above the move list,
+whichever colour you are playing.
+
+Because every third move is played on a bullet clock, **premoves** work the way they
+do on lichess: on your opponent's turn, drag or click a move and it fires the instant
+their move lands. A premove their move made illegal is simply dropped. Right-click or
+click elsewhere to cancel one.
+
+The whole game is sized to fit the window, so the board, both sets of clocks and the
+buttons stay on screen without scrolling — the move list takes up whatever height is
+left over.
 
 ## Running it locally
 
@@ -96,9 +106,9 @@ end, unfinished ones after 6 hours.
 Full legal move generation and validation, castling, en passant, promotion (with a
 piece picker), check/checkmate, stalemate, insufficient material, threefold
 repetition, the fifty-move rule, flag falls, timeout-vs-insufficient-material draws,
-resignation, draw offers, rematch with colors swapped, board flip, move list
-annotated with the clock each move was played on, reconnection after a refresh or
-dropped connection, spectators, and sound cues including a low-time warning.
+resignation, draw offers, rematch with colors swapped, premoves, board flip, move
+list annotated with the clock each move was played on, reconnection after a refresh
+or dropped connection, spectators, and sound cues including a low-time warning.
 
 Deliberately left out, per the brief: engine analysis, accounts, ratings, openings,
 and takebacks.
