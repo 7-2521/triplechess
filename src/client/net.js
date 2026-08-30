@@ -6,9 +6,10 @@
  * into a spectator.
  */
 export class Connection {
-  constructor(gameId, { prefer } = {}) {
+  constructor(gameId, { prefer, identity } = {}) {
     this.gameId = gameId;
     this.prefer = prefer;
+    this.identity = identity ?? null;
     this.socket = null;
     this.attempts = 0;
     this.closed = false;
@@ -80,6 +81,9 @@ export class Connection {
     const token = this.token;
     if (token) params.set('token', token);
     if (this.prefer) params.set('prefer', this.prefer);
+    // Persistent identity, so the result can be rated.
+    if (this.identity?.id) params.set('pid', this.identity.id);
+    if (this.identity?.name) params.set('name', this.identity.name);
 
     const socket = new WebSocket(`${scheme}://${location.host}/ws?${params}`);
     this.socket = socket;
@@ -118,6 +122,105 @@ export class Connection {
       return true;
     }
     return false;
+  }
+
+  close() {
+    this.closed = true;
+    this.socket?.close();
+  }
+}
+
+/**
+ * Connection to the matchmaking pool. Reconnects like the game socket, and
+ * re-posts the pending seek so a blip in the network does not silently drop
+ * you out of the queue.
+ */
+export class LobbyConnection {
+  constructor() {
+    this.socket = null;
+    this.attempts = 0;
+    this.closed = false;
+    this.handlers = new Map();
+    this.pending = null; // the seek to restore after a reconnect
+    this.token = null;
+  }
+
+  on(type, handler) {
+    this.handlers.set(type, handler);
+    return this;
+  }
+
+  emit(type, payload) {
+    this.handlers.get(type)?.(payload);
+  }
+
+  connect() {
+    if (this.closed) return;
+    const scheme = location.protocol === 'https:' ? 'wss' : 'ws';
+    const params = new URLSearchParams();
+    if (this.token) params.set('token', this.token);
+    const socket = new WebSocket(`${scheme}://${location.host}/lobby?${params}`);
+    this.socket = socket;
+
+    socket.addEventListener('open', () => {
+      this.attempts = 0;
+      this.emit('status', 'online');
+      if (this.pending) this.send({ t: 'seek', ...this.pending });
+    });
+
+    socket.addEventListener('message', (event) => {
+      let msg;
+      try {
+        msg = JSON.parse(event.data);
+      } catch {
+        return;
+      }
+      if (msg.t === 'hello') this.token = msg.token;
+      this.emit(msg.t, msg);
+    });
+
+    socket.addEventListener('close', () => {
+      if (this.closed) return;
+      this.emit('status', 'offline');
+      this.attempts += 1;
+      setTimeout(() => this.connect(), Math.min(8000, 500 * 2 ** (this.attempts - 1)));
+    });
+
+    socket.addEventListener('error', () => socket.close());
+  }
+
+  seek(clocks, color) {
+    this.pending = { clocks, color };
+    this.send({ t: 'seek', clocks, color });
+  }
+
+  cancel() {
+    this.pending = null;
+    this.send({ t: 'cancel' });
+  }
+
+  accept(id) {
+    this.pending = null;
+    this.send({ t: 'accept', id });
+  }
+
+  send(payload) {
+    if (this.socket?.readyState === WebSocket.OPEN) {
+      this.socket.send(JSON.stringify(payload));
+      return true;
+    }
+    return false;
+  }
+
+  /** Hand our seat token to the game we just got paired into. */
+  storeSeat(gameId, token) {
+    const key = `triplechess:token:${gameId}`;
+    try {
+      sessionStorage.setItem(key, token);
+      localStorage.setItem(key, token);
+    } catch {
+      /* private browsing — the seat is claimed on arrival instead */
+    }
   }
 
   close() {

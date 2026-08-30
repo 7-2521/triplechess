@@ -20,7 +20,8 @@ export function makeToken() {
 }
 
 export class Rooms {
-  constructor() {
+  constructor(ratings = null) {
+    this.ratings = ratings;
     /** @type {Map<string, { game: Game, sockets: Set<any> }>} */
     this.rooms = new Map();
     this.sweeper = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS);
@@ -35,6 +36,8 @@ export class Rooms {
     const room = { game, sockets: new Set() };
     // The game ends itself when a clock expires; push that out immediately.
     game.onChange = () => this.broadcast(id);
+    // Ratings settle the moment the game ends, whatever ended it.
+    game.onFinish = (finished) => this.ratings?.applyResult(finished);
     this.rooms.set(id, room);
     return game;
   }
@@ -49,8 +52,13 @@ export class Rooms {
    */
   rematch(previous) {
     const game = this.create(previous.spec);
+    // Same two players, opposite colours.
     game.seats.white = previous.seats.black;
     game.seats.black = previous.seats.white;
+    for (const field of ['playerIds', 'playerNames', 'playerRatings']) {
+      game[field].white = previous[field].black;
+      game[field].black = previous[field].white;
+    }
     return game;
   }
 

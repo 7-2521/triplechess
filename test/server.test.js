@@ -51,6 +51,17 @@ async function join(gameId, token) {
   return { socket, inbox, welcome };
 }
 
+/** Join a game carrying a persistent player identity, so it can be rated. */
+async function joinAs(gameId, playerId, name) {
+  const params = new URLSearchParams({ game: gameId, pid: playerId, name });
+  const socket = new WebSocket(`ws://127.0.0.1:${PORT}/ws?${params}`);
+  const inbox = [];
+  socket.on('message', (raw) => inbox.push(JSON.parse(raw.toString())));
+  await once(socket, 'open');
+  const welcome = await waitFor(inbox, (m) => m.t === 'welcome');
+  return { socket, inbox, welcome };
+}
+
 function waitFor(inbox, predicate, timeout = 8000) {
   return new Promise((resolve, reject) => {
     const deadline = Date.now() + timeout;
@@ -235,6 +246,118 @@ test('unknown game ids are refused', async () => {
   const fatal = await waitFor(inbox, (m) => m.t === 'fatal');
   assert.match(fatal.error, /not found/i);
   socket.close();
+});
+
+/** Connect to the matchmaking pool. */
+async function joinLobby() {
+  const socket = new WebSocket(`ws://127.0.0.1:${PORT}/lobby`);
+  const inbox = [];
+  socket.on('message', (raw) => inbox.push(JSON.parse(raw.toString())));
+  await once(socket, 'open');
+  const hello = await waitFor(inbox, (m) => m.t === 'hello');
+  return { socket, inbox, hello };
+}
+
+test('two seekers on the same time control are paired into a game', async () => {
+  const clocks = [
+    { initial: 300, increment: 0 },
+    { initial: 120, increment: 1 },
+    { initial: 60, increment: 0 },
+  ];
+  const a = await joinLobby();
+  const b = await joinLobby();
+
+  a.socket.send(JSON.stringify({ t: 'seek', clocks, color: 'random' }));
+  await waitFor(a.inbox, (m) => m.t === 'pool' && m.seeks.length === 1);
+  b.socket.send(JSON.stringify({ t: 'seek', clocks, color: 'random' }));
+
+  const pairedA = await waitFor(a.inbox, (m) => m.t === 'paired');
+  const pairedB = await waitFor(b.inbox, (m) => m.t === 'paired');
+
+  assert.equal(pairedA.gameId, pairedB.gameId, 'same game');
+  assert.notEqual(pairedA.color, pairedB.color, 'opposite colours');
+  assert.notEqual(pairedA.token, pairedB.token);
+
+  // Each player can take the seat it was promised.
+  const white = pairedA.color === 'white' ? pairedA : pairedB;
+  const seated = await join(pairedA.gameId, white.token);
+  assert.equal(seated.welcome.color, 'white');
+
+  const res = await fetch(`${BASE}/api/games/${pairedA.gameId}`);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).state.spec[0].initial, 300);
+
+  seated.socket.close();
+  a.socket.close();
+  b.socket.close();
+});
+
+test('seekers wanting different time controls keep waiting', async () => {
+  const a = await joinLobby();
+  const b = await joinLobby();
+
+  const slow = [
+    { initial: 900, increment: 0 },
+    { initial: 180, increment: 2 },
+    { initial: 60, increment: 0 },
+  ];
+  const fast = [
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+  ];
+  a.socket.send(JSON.stringify({ t: 'seek', clocks: slow, color: 'random' }));
+  b.socket.send(JSON.stringify({ t: 'seek', clocks: fast, color: 'random' }));
+
+  const listing = await waitFor(b.inbox, (m) => m.t === 'pool' && m.seeks.length === 2);
+  assert.equal(listing.seeks.filter((s) => s.mine).length, 1);
+  assert.equal(a.inbox.some((m) => m.t === 'paired'), false, 'nobody was paired');
+
+  a.socket.close();
+  b.socket.close();
+});
+
+test('a rated game settles both ratings when it ends', async () => {
+  const id = await createGame([
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+  ]);
+  const suffix = Date.now();
+  const white = await joinAs(id, `white-${suffix}`, 'Wanda');
+  const black = await joinAs(id, `black-${suffix}`, 'Bruno');
+  await waitFor(black.inbox, (m) => m.t === 'state' && m.state.status === 'active');
+
+  // Fool's mate: black wins.
+  const line = [
+    [white, 'f2', 'f3'],
+    [black, 'e7', 'e5'],
+    [white, 'g2', 'g4'],
+    [black, 'd8', 'h4'],
+  ];
+  let expected = 0;
+  for (const [player, from, to] of line) {
+    expected += 1;
+    player.socket.send(JSON.stringify({ t: 'move', from, to }));
+    // Wait for this specific move to land before sending the next one.
+    await waitFor(black.inbox, (m) => m.t === 'state' && m.state.history.length === expected);
+  }
+
+  const done = await waitFor(white.inbox, (m) => m.t === 'state' && m.state.status === 'finished');
+  assert.equal(done.state.result, '0-1');
+  assert.equal(done.state.reason, 'checkmate');
+
+  const change = done.state.ratingChange;
+  assert.ok(change, 'the game was rated');
+  assert.equal(change.white.before, 1200, 'everyone starts at 1200');
+  assert.equal(change.black.before, 1200);
+  assert.equal(change.black.delta, 20, 'the winner gains');
+  assert.equal(change.white.delta, -20, 'the loser drops the same');
+  assert.equal(change.black.after, 1220);
+  assert.equal(done.state.players.black.name, 'Bruno');
+
+  white.socket.close();
+  black.socket.close();
 });
 
 test('the lobby and game routes both serve the app shell', async () => {

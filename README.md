@@ -21,6 +21,48 @@ The whole game is sized to fit the window, so the board, both sets of clocks and
 buttons stay on screen without scrolling — the move list takes up whatever height is
 left over.
 
+## Finding a game
+
+Two ways to start, like lichess:
+
+- **Find an opponent** puts you in a pool. You are paired with anyone waiting on
+  the *same three time controls* whose colour preference does not clash with
+  yours. Everyone waiting is listed, and clicking someone else's seek accepts it
+  on their time controls.
+- **Create a private game** gives you a link to send to a specific person.
+
+## Ratings
+
+Everyone starts at **1200**. Finished games are rated with standard Elo — K=40
+until you have played 30 games, then K=20 — and the change is shown on the
+game-over card. A `?` next to your rating means it is still provisional.
+
+Identity is anonymous and lives in your browser's `localStorage`; there are no
+accounts or passwords. That has consequences worth knowing:
+
+- Ratings are per browser profile. Clearing site data, or playing from a
+  different device or a private window, starts you at 1200 again.
+- Nothing stops someone resetting a bad rating, so treat the numbers as friendly
+  rather than authoritative.
+- Games where both seats resolve to the same identity (two tabs in one browser)
+  are deliberately not rated.
+
+Ratings are stored in `data/ratings.json`. **On Railway the filesystem is
+ephemeral, so that file is wiped on every redeploy unless you attach a volume:**
+add a Volume, mount it at `/data`, and set `DATA_DIR=/data`. Without that, games
+still work and rate correctly — the table just resets when you deploy.
+
+## Reviewing a game
+
+Step back through any game, during play or after it. Use the arrows in the
+sidebar, click a move in the list, or use the keyboard: `←`/`→` a move at a
+time, `Home`/`End` to jump to the start or the live position.
+
+Because each move records which clock paid for it and what was left, the review
+rewinds **all six clocks** to what they read at that point, and shows how long
+the move took. Material advantage rewinds with it too. There is no engine
+analysis — this is a replay, not an evaluation.
+
 ## Running it locally
 
 ```bash
@@ -39,8 +81,9 @@ npm run dev        # esbuild watch, in one terminal
 npm start          # server, in another
 ```
 
-Run the tests with `npm test` (25 tests: clock rotation, increments, flag falls,
-game endings, seating/reconnection, and the WebSocket protocol end to end).
+Run the tests with `npm test` (60 tests: clock rotation, increments, flag falls,
+game endings, seating/reconnection, the WebSocket protocol end to end, pool
+pairing, Elo maths, material counting, and review reconstruction).
 
 ### Playing both sides in one browser
 
@@ -75,16 +118,22 @@ otherwise `engines.node` (`>=20`) applies.
 
 ```
 src/
-  shared/tc.js        clock model shared by server and client
+  shared/
+    tc.js             clock model shared by server and client
+    material.js       material balance, used live and in review
   server/
     game.js           chess rules + the three-clock state machine
     rooms.js          game registry, broadcast, rematch, expiry sweep
-    index.js          express + ws, HTTP API, static assets
+    pool.js           matchmaking: seeks, pairing, colour assignment
+    ratings.js        Elo, persisted to DATA_DIR
+    index.js          express + ws (/ws for a game, /lobby for the pool)
   client/
-    board.js          chessground wiring, legal moves, promotion picker
+    board.js          chessground wiring, legal moves, premoves, promotion
     clocks.js         the three-clock stack, smooth local ticking
+    review.js         replays the move list into positions + clock snapshots
+    identity.js       anonymous per-browser player id
     game.js           game screen
-    lobby.js          time-control editor
+    lobby.js          time-control editor + matchmaking
     net.js            WebSocket with reconnect + seat persistence
 ```
 
@@ -108,10 +157,12 @@ piece picker), check/checkmate, stalemate, insufficient material, threefold
 repetition, the fifty-move rule, flag falls, timeout-vs-insufficient-material draws,
 resignation, draw offers, rematch with colors swapped, premoves, board flip, move
 list annotated with the clock each move was played on, reconnection after a refresh
-or dropped connection, spectators, and sound cues including a low-time warning.
+or dropped connection, spectators, sound cues including a low-time warning,
+matchmaking by time control, Elo ratings from a 1200 start, material advantage
+(`+3`) beside whoever is ahead, and move-by-move review with the clocks rewound.
 
-Deliberately left out, per the brief: engine analysis, accounts, ratings, openings,
-and takebacks.
+Deliberately left out, per the brief: engine analysis (Stockfish), real accounts
+with passwords, openings, and takebacks.
 
 ## Credits and licensing
 

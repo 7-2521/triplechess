@@ -896,3 +896,216 @@ button:focus-visible {
     font-size: 18px;
   }
 }
+
+/* --- identity + matchmaking pool ----------------------------------------- */
+
+.identity {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.identity input {
+  width: 160px;
+  text-align: center;
+}
+
+.rating-chip {
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--line);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+}
+
+.panel h2 .count {
+  color: var(--text-dim);
+  font-weight: 400;
+}
+
+.pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pool-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--text-dim);
+}
+
+.pool-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.pool-row:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: #23281a;
+}
+
+.pool-row.is-mine {
+  opacity: 0.6;
+  cursor: default;
+  border-style: dashed;
+}
+
+.pool-specs {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--accent);
+}
+
+.pool-colour {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.pool-action {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-bright);
+}
+
+.lobby-actions .btn {
+  display: block;
+  margin: 0 auto 8px;
+  min-width: 260px;
+}
+
+.btn-find.is-waiting {
+  background: var(--warn);
+  border-color: var(--warn);
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+/* --- material advantage -------------------------------------------------- */
+
+.material {
+  margin-right: auto;
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.player-line {
+  gap: 6px;
+}
+
+/* --- review bar ---------------------------------------------------------- */
+
+.review-bar {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 6px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--bg-sunken);
+}
+
+.review-bar[hidden] {
+  display: none;
+}
+
+.review-bar.is-reviewing {
+  border-color: var(--warn);
+}
+
+.review-bar .nav {
+  padding: 3px 9px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.review-bar .nav:hover:not(:disabled) {
+  background: #2c2a26;
+}
+
+.review-bar .nav:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.review-info {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.status-bar[data-tone='review'] {
+  background: #302a1d;
+  color: #e8c88a;
+}
+
+.move[data-ply] {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.move[data-ply]:hover {
+  background: #2f2d29;
+}
+
+.move.is-current {
+  background: var(--accent-dim);
+}
+
+.move.is-current .move-san {
+  color: #fff;
+  font-weight: 600;
+}
+
+.move.is-current .move-clock {
+  background: rgb(0 0 0 / 25%);
+  color: #e6f0d8;
+}
+
+.rating-line {
+  margin: 0 0 14px;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--text-bright);
+}
+
+.rating-line .up {
+  color: var(--accent);
+}
+
+.rating-line .down {
+  color: #e8837a;
+}

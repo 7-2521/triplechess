@@ -32,8 +32,15 @@ export class Game {
     this.turnStartedAt = null;
     this.flagTimer = null;
 
-    this.seats = { white: null, black: null }; // player token
+    this.seats = { white: null, black: null }; // per-game seat token
     this.connected = { white: false, black: false };
+    // Stable, browser-held identity used for ratings (distinct from the seat token).
+    this.playerIds = { white: null, black: null };
+    this.playerNames = { white: null, black: null };
+    this.playerRatings = { white: null, black: null };
+    this.rated = false;
+    this.ratingChange = null;
+    this.onFinish = null;
     this.drawOffer = null; // color that offered
     this.rematchOffer = null;
 
@@ -269,6 +276,7 @@ export class Game {
     this.reason = reason;
     this.endedAt = Date.now();
     this.turnStartedAt = null;
+    this.onFinish?.(this); // settle ratings before anyone is told the result
   }
 
   // --- serialization -------------------------------------------------------
@@ -298,6 +306,11 @@ export class Game {
       movesPlayed: { ...this.movesPlayed },
       seated: { white: this.seats.white !== null, black: this.seats.black !== null },
       connected: { ...this.connected },
+      players: {
+        white: { name: this.playerNames.white, rating: this.playerRatings.white },
+        black: { name: this.playerNames.black, rating: this.playerRatings.black },
+      },
+      ratingChange: this.ratingChange,
       drawOffer: this.drawOffer,
       rematchOffer: this.rematchOffer,
       history: this.history.map((h) => ({

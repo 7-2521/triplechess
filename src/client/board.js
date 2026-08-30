@@ -100,13 +100,35 @@ export class BoardView {
     });
 
     if (!playing) {
-      this.ground.cancelPremove();
+      this.clearPending();
     } else if (myTurn) {
       // Our turn came around: fire any queued premove. chessground validates it
       // against the legal moves we just set and drops it if it no longer works,
       // so a premove that the opponent's move invalidated simply disappears.
       this.ground.playPremove();
     }
+  }
+
+  /** Drop any queued premove and leftover square selection. */
+  clearPending() {
+    this.ground.cancelPremove();
+    this.ground.selectSquare(null);
+  }
+
+  /** Show a past position while reviewing. The board is look-only here. */
+  showFrame(frame) {
+    this.cancelPromotion();
+    this.ground.set({
+      fen: frame.fen,
+      turnColor: frame.turn,
+      lastMove: frame.lastMove ?? undefined,
+      check: frame.check ?? false,
+      movable: { free: false, color: undefined, dests: new Map() },
+      premovable: { enabled: false },
+      draggable: { enabled: false },
+      selectable: { enabled: false },
+    });
+    this.clearPending();
   }
 
   handleUserMove(orig, dest) {

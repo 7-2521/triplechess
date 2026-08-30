@@ -15,3 +15,6 @@ npm-debug.log*
 .DS_Store
 .vscode/
 .idea/
+
+# Ratings store (use a Railway volume to persist)
+data/

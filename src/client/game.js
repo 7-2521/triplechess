@@ -3,6 +3,9 @@ import { ClockStack } from './clocks.js';
 import { Connection } from './net.js';
 import { sounds } from './sound.js';
 import { formatSpec } from '../shared/tc.js';
+import { advantageFor, materialFromFen } from '../shared/material.js';
+import { buildTimeline, formatSpent } from './review.js';
+import { getIdentity } from './identity.js';
 
 const REASON_TEXT = {
   checkmate: 'Checkmate',
@@ -41,6 +44,7 @@ export function renderGame(root, gameId) {
         <div class="player-block" id="top-block">
           <div class="player-line">
             <span class="player-name" id="top-name">Black</span>
+            <span class="material" id="top-material"></span>
             <span class="presence" id="top-presence"></span>
           </div>
           <div id="top-clocks"></div>
@@ -50,10 +54,19 @@ export function renderGame(root, gameId) {
 
         <div class="moves" id="moves"></div>
 
+        <div class="review-bar" id="review" hidden>
+          <button type="button" class="nav" id="nav-start" title="First move (Home)">&#8676;</button>
+          <button type="button" class="nav" id="nav-prev" title="Previous (&larr;)">&#8592;</button>
+          <span class="review-info" id="review-info"></span>
+          <button type="button" class="nav" id="nav-next" title="Next (&rarr;)">&#8594;</button>
+          <button type="button" class="nav" id="nav-end" title="Latest (End)">&#8677;</button>
+        </div>
+
         <div class="player-block" id="bottom-block">
           <div id="bottom-clocks"></div>
           <div class="player-line">
             <span class="player-name" id="bottom-name">White</span>
+            <span class="material" id="bottom-material"></span>
             <span class="presence" id="bottom-presence"></span>
           </div>
         </div>
@@ -80,7 +93,7 @@ export function renderGame(root, gameId) {
   const controlsEl = el('controls');
 
   const prefer = sessionStorage.getItem(`triplechess:prefer:${gameId}`) || undefined;
-  const connection = new Connection(gameId, { prefer });
+  const connection = new Connection(gameId, { prefer, identity: getIdentity() });
 
   const board = new BoardView(boardEl, el('promotion'), (move) => {
     connection.send({ t: 'move', ...move });
@@ -100,6 +113,14 @@ export function renderGame(root, gameId) {
   let lastStatus = null;
   let resignArmed = false;
 
+  // Review: `frames` is the whole game rebuilt ply by ply. `ply` is null when
+  // following the live position, otherwise the frame being examined.
+  let frames = [];
+  let ply = null;
+  const isReviewing = () => ply !== null && ply < frames.length - 1;
+  const currentFrame = () => frames[ply === null ? frames.length - 1 : ply] ?? null;
+  const at = () => (ply === null ? frames.length - 1 : ply);
+
   // --- clock rendering loop ------------------------------------------------
   function frame() {
     stacks.top.render();
@@ -118,14 +139,15 @@ export function renderGame(root, gameId) {
     stacks.top.root.dataset.color = topColor;
     stacks.bottom.color = bottomColor;
     stacks.bottom.root.dataset.color = bottomColor;
-    el('top-name').textContent = titleCase(topColor) + (myColor === topColor ? ' (you)' : '');
-    el('bottom-name').textContent =
-      titleCase(bottomColor) + (myColor === bottomColor ? ' (you)' : '');
-    if (state) {
-      stacks.top.update(state);
-      stacks.bottom.update(state);
-      renderPresence();
-    }
+    const label = (color) => {
+      const player = state?.players?.[color];
+      const who = player?.name || titleCase(color);
+      const rating = player?.rating ? ` ${player.rating}` : '';
+      return `${who}${rating}${myColor === color ? ' (you)' : ''}`;
+    };
+    el('top-name').textContent = label(topColor);
+    el('bottom-name').textContent = label(bottomColor);
+    if (state) renderPresence();
   }
 
   function renderPresence() {
@@ -143,25 +165,101 @@ export function renderGame(root, gameId) {
 
   function renderMoves() {
     if (!state) return;
+    const active = ply === null ? state.history.length : ply;
     const rows = [];
     for (let i = 0; i < state.history.length; i += 2) {
       const number = i / 2 + 1;
-      const white = state.history[i];
-      const black = state.history[i + 1];
-      const cell = (m) =>
-        m
-          ? `<span class="move"><span class="move-san">${m.san}</span><span class="move-clock" title="played on clock ${m.clockIndex + 1}">${m.clockIndex + 1}</span></span>`
-          : '<span class="move"></span>';
+      const cell = (m, index) => {
+        if (!m) return '<span class="move"></span>';
+        const on = index + 1 === active ? ' is-current' : '';
+        return `<span class="move${on}" data-ply="${index + 1}" role="button" tabindex="0"><span class="move-san">${m.san}</span><span class="move-clock" title="played on clock ${m.clockIndex + 1}">${m.clockIndex + 1}</span></span>`;
+      };
       rows.push(
-        `<div class="move-row"><span class="move-no">${number}.</span>${cell(white)}${cell(black)}</div>`,
+        `<div class="move-row"><span class="move-no">${number}.</span>${cell(state.history[i], i)}${cell(state.history[i + 1], i + 1)}</div>`,
       );
     }
     movesEl.innerHTML = rows.join('') || '<p class="moves-empty">No moves yet.</p>';
-    movesEl.scrollTop = movesEl.scrollHeight;
+    const current = movesEl.querySelector('.move.is-current');
+    if (current) current.scrollIntoView({ block: 'nearest' });
+    else movesEl.scrollTop = movesEl.scrollHeight;
+  }
+
+  /** Material badge (+3) next to whoever is ahead, live or in review. */
+  function renderMaterial() {
+    const frame = currentFrame();
+    const fen = frame ? frame.fen : state?.fen;
+    if (!fen) return;
+    const { diff } = materialFromFen(fen);
+    el('top-material').textContent = advantageFor(stacks.top.color, diff);
+    el('bottom-material').textContent = advantageFor(stacks.bottom.color, diff);
+  }
+
+  function renderReviewBar() {
+    const total = frames.length - 1;
+    const bar = el('review');
+    bar.hidden = total < 1;
+    if (total < 1) return;
+
+    const at = ply === null ? total : ply;
+    el('nav-start').disabled = at === 0;
+    el('nav-prev').disabled = at === 0;
+    el('nav-next').disabled = at >= total;
+    el('nav-end').disabled = at >= total;
+
+    const frame = frames[at];
+    if (at === 0) {
+      el('review-info').textContent = 'Start';
+    } else {
+      const moveNo = Math.ceil(at / 2);
+      const dots = frame.color === 'black' ? '…' : '.';
+      const spent = formatSpent(frame.spentMs);
+      el('review-info').textContent =
+        `${moveNo}${dots} ${frame.san} · clock ${frame.clockIndex + 1}` + (spent ? ` · ${spent}` : '');
+    }
+    bar.classList.toggle('is-reviewing', isReviewing());
+  }
+
+  /** Move to a ply; `null` returns to the live position. */
+  function goTo(target) {
+    const total = frames.length - 1;
+    if (target === null || target >= total) ply = null;
+    else ply = Math.max(0, target);
+
+    const frame = currentFrame();
+    if (frame && isReviewing()) {
+      board.showFrame(frame);
+      stacks.top.update(reviewClockState(frame));
+      stacks.bottom.update(reviewClockState(frame));
+    } else if (state) {
+      board.update(state, myColor);
+      stacks.top.update(state);
+      stacks.bottom.update(state);
+    }
+    renderMaterial();
+    renderReviewBar();
+    renderMoves();
+    renderStatus();
+  }
+
+  /** Feed the clock stacks a frozen snapshot for the ply being reviewed. */
+  function reviewClockState(frame) {
+    return {
+      spec: state.spec,
+      clocks: frame.clocks,
+      activeIndex: frame.activeIndex,
+      running: null, // nothing ticks while looking at the past
+    };
   }
 
   function renderStatus() {
     if (!state) return;
+
+    if (isReviewing()) {
+      const total = frames.length - 1;
+      statusEl.textContent = `Reviewing — move ${at()} of ${total}`;
+      statusEl.dataset.tone = 'review';
+      return;
+    }
 
     if (state.status === 'waiting') {
       const missing = !state.seated.white || !state.seated.black;
@@ -236,10 +334,15 @@ export function renderGame(root, gameId) {
           : `${state.result === '1-0' ? 'White' : 'Black'} wins`;
       const offered = state.rematchOffer && state.rematchOffer === myColor;
       const theirOffer = state.rematchOffer && state.rematchOffer !== myColor;
+      const change = myColor && state.ratingChange ? state.ratingChange[myColor] : null;
+      const ratingLine = change
+        ? `<p class="rating-line">Rating ${change.after} <span class="${change.delta >= 0 ? 'up' : 'down'}">${change.delta >= 0 ? '+' : ''}${change.delta}</span></p>`
+        : '';
       overlay.innerHTML = `
         <div class="overlay-card">
           <h3>${resultLine}</h3>
           <p class="overlay-note">${reason} · ${state.result}</p>
+          ${ratingLine}
           ${
             myColor
               ? `<button type="button" class="btn btn-primary" id="rematch">${
@@ -317,15 +420,31 @@ export function renderGame(root, gameId) {
   function applyState(next) {
     const previousLength = lastHistoryLength;
     const previousStatus = lastStatus;
+    const wasReviewing = isReviewing();
     state = next;
+    frames = buildTimeline(state);
+    assignStacks(); // names and ratings arrive with the state
 
-    board.update(state, myColor);
-    stacks.top.update(state);
-    stacks.bottom.update(state);
+    // Stay where the reader is looking if they had stepped back; otherwise
+    // follow the live position.
+    if (!wasReviewing) ply = null;
+
+    if (isReviewing()) {
+      const frame = currentFrame();
+      board.showFrame(frame);
+      stacks.top.update(reviewClockState(frame));
+      stacks.bottom.update(reviewClockState(frame));
+    } else {
+      board.update(state, myColor);
+      stacks.top.update(state);
+      stacks.bottom.update(state);
+    }
 
     renderStatus();
     renderMoves();
     renderPresence();
+    renderMaterial();
+    renderReviewBar();
     renderOverlay();
     renderPrompt();
     renderControls();
@@ -339,7 +458,35 @@ export function renderGame(root, gameId) {
   el('flip').addEventListener('click', () => {
     orientation = board.flip();
     assignStacks();
+    goTo(ply);
     renderOverlay();
+  });
+
+  // --- review navigation ---------------------------------------------------
+  el('nav-start').addEventListener('click', () => goTo(0));
+  el('nav-prev').addEventListener('click', () => goTo(at() - 1));
+  el('nav-next').addEventListener('click', () => goTo(at() + 1));
+  el('nav-end').addEventListener('click', () => goTo(null));
+
+  movesEl.addEventListener('click', (event) => {
+    const move = event.target.closest('.move[data-ply]');
+    if (move) goTo(Number(move.dataset.ply));
+  });
+
+  document.addEventListener('keydown', (event) => {
+    const tag = event.target?.tagName;
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    const keys = {
+      ArrowLeft: () => goTo(at() - 1),
+      ArrowRight: () => goTo(at() + 1),
+      Home: () => goTo(0),
+      End: () => goTo(null),
+    };
+    const action = keys[event.key];
+    if (!action) return;
+    event.preventDefault();
+    action();
   });
 
   const soundButton = el('sound');

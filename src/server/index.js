@@ -5,6 +5,8 @@ import express from 'express';
 import { WebSocketServer } from 'ws';
 import { sanitizeClocks } from '../shared/tc.js';
 import { Rooms, makeToken } from './rooms.js';
+import { Pool } from './pool.js';
+import { Ratings, sanitizeName } from './ratings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
@@ -14,7 +16,9 @@ const HOST = process.env.HOST || '0.0.0.0';
 const HEARTBEAT_MS = 25000; // keep proxies (Railway included) from idling us out
 
 const app = express();
-const rooms = new Rooms();
+const ratings = new Ratings();
+const rooms = new Rooms(ratings);
+const pool = new Pool(rooms);
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '8kb' }));
@@ -29,13 +33,19 @@ app.use(
 );
 app.use(express.static(PUBLIC_DIR, { maxAge: 0, index: false }));
 
-app.get('/healthz', (_req, res) => res.json({ ok: true, games: rooms.rooms.size }));
+app.get('/healthz', (_req, res) =>
+  res.json({ ok: true, games: rooms.rooms.size, waiting: pool.seeks.size }),
+);
 
 app.post('/api/games', (req, res) => {
   const clocks = sanitizeClocks(req.body?.clocks);
   const game = rooms.create(clocks);
   res.status(201).json({ id: game.id, clocks: game.spec });
 });
+
+app.get('/api/leaderboard', (_req, res) => res.json({ players: ratings.leaderboard(10) }));
+
+app.get('/api/player/:id', (req, res) => res.json(ratings.peek(req.params.id)));
 
 app.get('/api/games/:id', (req, res) => {
   const room = rooms.get(req.params.id);
@@ -51,9 +61,24 @@ app.get(/^\/(?:g\/[^/]+)?$/, (_req, res) => {
 });
 
 const server = createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
 
-wss.on('connection', (socket, req) => {
+// Two endpoints share the port: /ws is a single game, /lobby is the waiting
+// room. They are routed by hand because two WebSocketServers attached to the
+// same http server would each try to answer every upgrade.
+const wss = new WebSocketServer({ noServer: true });
+const lobbyWss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+  const { pathname } = new URL(req.url, 'http://localhost');
+  const target = pathname === '/ws' ? wss : pathname === '/lobby' ? lobbyWss : null;
+  if (!target) {
+    socket.destroy();
+    return;
+  }
+  target.handleUpgrade(req, socket, head, (ws) => target.emit('connection', ws, req));
+});
+
+function prepare(socket) {
   socket.sendJson = (payload) => {
     if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(payload));
   };
@@ -61,6 +86,40 @@ wss.on('connection', (socket, req) => {
   socket.on('pong', () => {
     socket.isAlive = true;
   });
+}
+
+lobbyWss.on('connection', (socket, req) => {
+  prepare(socket);
+  const url = new URL(req.url, 'http://localhost');
+  // The seat token is minted here so it can be baked into the game we create.
+  socket.token = url.searchParams.get('token') || makeToken();
+  pool.join(socket);
+  socket.sendJson({ t: 'hello', token: socket.token });
+  pool.broadcast();
+
+  socket.on('message', (raw) => {
+    let msg;
+    try {
+      msg = JSON.parse(raw.toString());
+    } catch {
+      return;
+    }
+    if (msg.t === 'seek') {
+      pool.seek(socket, { clocks: msg.clocks, color: msg.color });
+    } else if (msg.t === 'cancel') {
+      pool.withdraw(socket);
+      pool.broadcast();
+    } else if (msg.t === 'accept') {
+      const result = pool.accept(socket, String(msg.id ?? ''));
+      if (result.error) socket.sendJson({ t: 'error', error: result.error });
+    }
+  });
+
+  socket.on('close', () => pool.leave(socket));
+});
+
+wss.on('connection', (socket, req) => {
+  prepare(socket);
 
   const url = new URL(req.url, 'http://localhost');
   const gameId = url.searchParams.get('game');
@@ -82,6 +141,21 @@ wss.on('connection', (socket, req) => {
   socket.token = token;
   socket.color = color; // null for spectators
   room.sockets.add(socket);
+
+  // Bind this seat to the browser's persistent identity so the result can be
+  // rated. The identity is only recorded once, so a later joiner cannot
+  // overwrite whoever actually played the game.
+  if (color) {
+    const playerId = url.searchParams.get('pid');
+    const playerName = sanitizeName(url.searchParams.get('name'));
+    if (playerId && !game.playerIds[color]) game.playerIds[color] = playerId;
+    if (playerName) game.playerNames[color] = playerName;
+    const record = ratings.get(game.playerIds[color], game.playerNames[color]);
+    if (record) {
+      game.playerRatings[color] = record.rating;
+      if (!game.playerNames[color] && record.name) game.playerNames[color] = record.name;
+    }
+  }
 
   socket.sendJson({ t: 'welcome', token, color, id: game.id });
   if (color) game.setConnected(color, true);
@@ -156,7 +230,8 @@ function handleMessage(socket, room, msg) {
 
 // Drop sockets that stopped answering, and keep live ones from idling out.
 const heartbeat = setInterval(() => {
-  for (const socket of wss.clients) {
+  pool.sweep();
+  for (const socket of [...wss.clients, ...lobbyWss.clients]) {
     if (socket.isAlive === false) {
       socket.terminate();
       continue;
