@@ -75,13 +75,15 @@ Accounts, ratings and the session key are all kept in a single JSON file.
 unless you attach a volume.** Without one, every account and rating disappears
 the next time you deploy and everyone is signed out.
 
-To keep them, attach a volume to the service:
+To keep them, attach a volume. Volumes are created from the **project canvas**,
+not from the service's Settings tab:
 
-1. Open the service in the Railway dashboard.
-2. **Settings → Volumes → Add Volume** (or right-click the service on the
-   project canvas and choose *Attach Volume*).
-3. Give it a mount path — `/data` is a good default — and save. Railway
-   redeploys the service with the volume attached.
+1. Open the project and either press **Cmd/Ctrl + K** and search for "volume",
+   or **right-click on empty canvas space** (the background, not the service
+   card) and pick the volume option.
+2. Choose the **triplechess service** to attach it to.
+3. Open that service's **Settings** and set the volume's **mount path** —
+   `/data` is a good default. Railway redeploys with the volume attached.
 
 **No variable is needed.** Railway sets `RAILWAY_VOLUME_MOUNT_PATH` when a
 volume is attached and the app uses it automatically, so the storage location
@@ -95,9 +97,9 @@ Storing accounts and ratings in /data (persistent)
 Storing accounts and ratings in /app/data — EPHEMERAL: attach a volume ...
 ```
 
-Two caveats: a volume keeps the service to a single replica, and anything
-written *before* you attached it is not carried over — so accounts created on an
-ephemeral deploy have to be made again.
+One caveat: anything written *before* you attached the volume is not carried
+over, so accounts created on an ephemeral deploy have to be made again. Note too
+that volumes mount at container start, not at build time.
 
 ## Reviewing a game
 
