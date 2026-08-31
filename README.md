@@ -69,17 +69,35 @@ than the app currently stores.
 
 ### Where the data lives — read this before deploying
 
-Accounts, ratings and the session key are all kept in `data/ratings.json`
-(override the directory with `DATA_DIR`).
+Accounts, ratings and the session key are all kept in a single JSON file.
 
 **Railway's filesystem is ephemeral, so that file is wiped on every redeploy
 unless you attach a volume.** Without one, every account and rating disappears
-the next time you deploy and everyone is signed out. To keep them:
+the next time you deploy and everyone is signed out.
 
-1. Add a **Volume** to the service and mount it at `/data`.
-2. Set `DATA_DIR=/data` in the service variables.
+To keep them, attach a volume to the service:
 
-Everything works without a volume — the table just resets on each deploy.
+1. Open the service in the Railway dashboard.
+2. **Settings → Volumes → Add Volume** (or right-click the service on the
+   project canvas and choose *Attach Volume*).
+3. Give it a mount path — `/data` is a good default — and save. Railway
+   redeploys the service with the volume attached.
+
+**No variable is needed.** Railway sets `RAILWAY_VOLUME_MOUNT_PATH` when a
+volume is attached and the app uses it automatically, so the storage location
+can never drift out of sync with the mount path. Set `DATA_DIR` only if you want
+to override that.
+
+The startup log says which it is, so you can confirm from the deploy logs:
+
+```
+Storing accounts and ratings in /data (persistent)
+Storing accounts and ratings in /app/data — EPHEMERAL: attach a volume ...
+```
+
+Two caveats: a volume keeps the service to a single replica, and anything
+written *before* you attached it is not carried over — so accounts created on an
+ephemeral deploy have to be made again.
 
 ## Reviewing a game
 

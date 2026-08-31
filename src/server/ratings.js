@@ -37,15 +37,30 @@ export function sanitizeName(name) {
 }
 
 /**
- * Ratings for anonymous players, keyed by a browser-held player id.
+ * Where accounts, ratings and the session key are kept.
+ *
+ * Railway sets RAILWAY_VOLUME_MOUNT_PATH whenever a volume is attached, so
+ * simply attaching one is enough — there is no second variable to keep in sync
+ * with the mount path. DATA_DIR still wins if you want to override it.
+ */
+export function defaultDataDir() {
+  return (
+    process.env.DATA_DIR ||
+    process.env.RAILWAY_VOLUME_MOUNT_PATH ||
+    path.join(process.cwd(), 'data')
+  );
+}
+
+/**
+ * Player records, keyed by a browser-held guest id or an account id.
  *
  * Persisted as a small JSON file. On a platform with an ephemeral filesystem
- * (Railway without a volume) that file does not survive a redeploy — see the
- * README; point DATA_DIR at a mounted volume to keep ratings.
+ * (Railway *without* a volume) that file does not survive a redeploy, so
+ * accounts and ratings reset — see the README.
  */
 export class Ratings {
   /** Pass `dir: null` for an in-memory store that never touches disk. */
-  constructor({ dir = process.env.DATA_DIR || path.join(process.cwd(), 'data') } = {}) {
+  constructor({ dir = defaultDataDir() } = {}) {
     this.dir = dir;
     this.persist = dir !== null;
     this.file = this.persist ? path.join(dir, 'ratings.json') : null;

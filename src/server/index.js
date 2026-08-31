@@ -303,6 +303,13 @@ heartbeat.unref?.();
 
 server.listen(PORT, HOST, () => {
   console.log(`Triple Chess listening on http://${HOST}:${PORT}`);
+  // Say plainly whether accounts will survive a redeploy, so a missing volume
+  // is obvious in the deploy logs rather than after everyone is logged out.
+  const onVolume = Boolean(process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.DATA_DIR);
+  console.log(
+    `Storing accounts and ratings in ${ratings.dir}` +
+      (onVolume ? ' (persistent)' : ' — EPHEMERAL: attach a volume to keep accounts across deploys'),
+  );
 });
 
 for (const signal of ['SIGTERM', 'SIGINT']) {
