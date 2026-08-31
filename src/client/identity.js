@@ -1,12 +1,17 @@
-// A lightweight, anonymous identity kept in the browser. There are no
-// accounts or passwords — this is what ratings are keyed on, so it lives and
-// dies with the browser profile.
+// The guest identity: a lightweight anonymous player kept in the browser, used
+// when nobody is signed in. Guest ids carry a "g:" prefix that the server
+// insists on, so an anonymous client can never claim an account's identity.
+// Signing in supersedes this entirely — the server then takes the player id
+// from the session cookie and ignores whatever the client sends.
 
 const KEY = 'triplechess:player';
+const GUEST_PREFIX = 'g:';
 
 function randomId() {
-  if (crypto.randomUUID) return crypto.randomUUID();
-  return Math.random().toString(36).slice(2) + Date.now().toString(36);
+  const raw = crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2) + Date.now().toString(36);
+  return GUEST_PREFIX + raw;
 }
 
 function randomName() {
@@ -25,6 +30,10 @@ export function getIdentity() {
   }
   if (!stored || !stored.id) {
     stored = { id: randomId(), name: randomName() };
+    save(stored);
+  } else if (!stored.id.startsWith(GUEST_PREFIX)) {
+    // Ids minted before guest prefixes existed.
+    stored = { ...stored, id: GUEST_PREFIX + stored.id };
     save(stored);
   }
   cached = stored;

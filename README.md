@@ -31,26 +31,55 @@ Two ways to start, like lichess:
   on their time controls.
 - **Create a private game** gives you a link to send to a specific person.
 
-## Ratings
+## Accounts and ratings
 
 Everyone starts at **1200**. Finished games are rated with standard Elo — K=40
 until you have played 30 games, then K=20 — and the change is shown on the
-game-over card. A `?` next to your rating means it is still provisional.
+result card. A `?` next to a rating means it is still provisional.
 
-Identity is anonymous and lives in your browser's `localStorage`; there are no
-accounts or passwords. That has consequences worth knowing:
+You can play as a **guest** or **create an account** (username + password) from
+the lobby. The difference is where your rating lives:
 
-- Ratings are per browser profile. Clearing site data, or playing from a
-  different device or a private window, starts you at 1200 again.
-- Nothing stops someone resetting a bad rating, so treat the numbers as friendly
-  rather than authoritative.
-- Games where both seats resolve to the same identity (two tabs in one browser)
-  are deliberately not rated.
+- **Guest** — identity is a random id in `localStorage`. The rating is tied to
+  that browser profile, so clearing site data or switching device starts you
+  over at 1200.
+- **Account** — the rating follows you to any browser or device you sign in on.
 
-Ratings are stored in `data/ratings.json`. **On Railway the filesystem is
-ephemeral, so that file is wiped on every redeploy unless you attach a volume:**
-add a Volume, mount it at `/data`, and set `DATA_DIR=/data`. Without that, games
-still work and rate correctly — the table just resets when you deploy.
+Games where both seats resolve to the same player are deliberately not rated.
+
+### How the auth works
+
+- Passwords are hashed with **scrypt** and a per-user random salt; the plaintext
+  is never stored or logged. Login compares in constant time and gives the same
+  message for a wrong password as for an unknown user, so usernames cannot be
+  probed. Repeated failures are rate limited per username and IP.
+- Sessions are HMAC-signed tokens in an **httpOnly, SameSite=Lax** cookie
+  (`Secure` when served over HTTPS), valid 30 days. Being httpOnly, page
+  JavaScript cannot read them. They are stateless, so they survive a restart.
+- The server takes a player's identity from that cookie and **ignores the id the
+  client sends** when signed in. Guest ids must carry a `g:` prefix and account
+  ids use `u:`, so an anonymous client cannot claim an account or its rating.
+- The signing key comes from `SESSION_SECRET` if set, otherwise one is generated
+  and kept in the data file. Set it explicitly if you ever run more than one
+  instance, or everyone will be logged out when a request hits the other one.
+
+**There is no email or password reset.** A forgotten password cannot be
+recovered, and an account cannot be deleted from the UI — both would need more
+than the app currently stores.
+
+### Where the data lives — read this before deploying
+
+Accounts, ratings and the session key are all kept in `data/ratings.json`
+(override the directory with `DATA_DIR`).
+
+**Railway's filesystem is ephemeral, so that file is wiped on every redeploy
+unless you attach a volume.** Without one, every account and rating disappears
+the next time you deploy and everyone is signed out. To keep them:
+
+1. Add a **Volume** to the service and mount it at `/data`.
+2. Set `DATA_DIR=/data` in the service variables.
+
+Everything works without a volume — the table just resets on each deploy.
 
 ## Reviewing a game
 
@@ -81,9 +110,10 @@ npm run dev        # esbuild watch, in one terminal
 npm start          # server, in another
 ```
 
-Run the tests with `npm test` (60 tests: clock rotation, increments, flag falls,
+Run the tests with `npm test` (82 tests: clock rotation, increments, flag falls,
 game endings, seating/reconnection, the WebSocket protocol end to end, pool
-pairing, Elo maths, material counting, and review reconstruction).
+pairing, Elo maths, material counting, review reconstruction, password hashing,
+session tokens, and the guard that stops a client claiming an account).
 
 ### Playing both sides in one browser
 
@@ -106,7 +136,8 @@ port, and there is nothing to provision.
    (via `railway.json`), and starts with `npm start`.
 4. **Settings → Networking → Generate Domain** to get a public URL.
 
-No environment variables are required. `PORT` is injected by Railway and the server
+No environment variables are required to boot (see the volume note above if you
+want accounts to survive a redeploy). `PORT` is injected by Railway and the server
 binds `0.0.0.0`. `/healthz` is wired up as the healthcheck. WebSockets work over the
 generated domain without extra configuration — the client picks `wss://`
 automatically on HTTPS.
@@ -125,13 +156,14 @@ src/
     game.js           chess rules + the three-clock state machine
     rooms.js          game registry, broadcast, rematch, expiry sweep
     pool.js           matchmaking: seeks, pairing, colour assignment
-    ratings.js        Elo, persisted to DATA_DIR
+    ratings.js        Elo + the player store, persisted to DATA_DIR
+    accounts.js       scrypt passwords, signed session cookies
     index.js          express + ws (/ws for a game, /lobby for the pool)
   client/
     board.js          chessground wiring, legal moves, premoves, promotion
     clocks.js         the three-clock stack, smooth local ticking
     review.js         replays the move list into positions + clock snapshots
-    identity.js       anonymous per-browser player id
+    identity.js       guest identity when nobody is signed in
     game.js           game screen
     lobby.js          time-control editor + matchmaking
     net.js            WebSocket with reconnect + seat persistence
@@ -158,11 +190,12 @@ repetition, the fifty-move rule, flag falls, timeout-vs-insufficient-material dr
 resignation, draw offers, rematch with colors swapped, premoves, board flip, move
 list annotated with the clock each move was played on, reconnection after a refresh
 or dropped connection, spectators, sound cues including a low-time warning,
-matchmaking by time control, Elo ratings from a 1200 start, material advantage
-(`+3`) beside whoever is ahead, and move-by-move review with the clocks rewound.
+matchmaking by time control, guest play or username/password accounts, Elo
+ratings from a 1200 start, material advantage (`+3`) beside whoever is ahead,
+a dismissible result card, and move-by-move review with the clocks rewound.
 
-Deliberately left out, per the brief: engine analysis (Stockfish), real accounts
-with passwords, openings, and takebacks.
+Deliberately left out, per the brief: engine analysis (Stockfish), openings, and
+takebacks. Also absent: email, password reset, and account deletion.
 
 ## Credits and licensing
 

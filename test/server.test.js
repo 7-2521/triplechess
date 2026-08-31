@@ -324,8 +324,9 @@ test('a rated game settles both ratings when it ends', async () => {
     { initial: 60, increment: 0 },
   ]);
   const suffix = Date.now();
-  const white = await joinAs(id, `white-${suffix}`, 'Wanda');
-  const black = await joinAs(id, `black-${suffix}`, 'Bruno');
+  // Guest ids must carry the "g:" prefix the server insists on.
+  const white = await joinAs(id, `g:white-${suffix}`, 'Wanda');
+  const black = await joinAs(id, `g:black-${suffix}`, 'Bruno');
   await waitFor(black.inbox, (m) => m.t === 'state' && m.state.status === 'active');
 
   // Fool's mate: black wins.
@@ -358,6 +359,123 @@ test('a rated game settles both ratings when it ends', async () => {
 
   white.socket.close();
   black.socket.close();
+});
+
+/** Register over HTTP and return the session cookie. */
+async function registerUser(username, password = 'hunter2hunter2') {
+  const res = await fetch(`${BASE}/api/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const body = await res.json();
+  const cookie = (res.headers.get('set-cookie') || '').split(';')[0];
+  return { status: res.status, body, cookie };
+}
+
+test('an account can be registered, used, and logged out', async () => {
+  const name = `player${Date.now()}`;
+  const created = await registerUser(name);
+  assert.equal(created.status, 201);
+  assert.equal(created.body.user.username, name);
+  assert.equal(created.body.user.rating, 1200);
+  assert.match(created.cookie, /^tc_session=/);
+
+  const me = await fetch(`${BASE}/api/me`, { headers: { cookie: created.cookie } });
+  assert.equal((await me.json()).user.username, name);
+
+  // No cookie: nobody is signed in.
+  assert.equal((await (await fetch(`${BASE}/api/me`)).json()).user, null);
+
+  const login = await fetch(`${BASE}/api/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: name.toUpperCase(), password: 'hunter2hunter2' }),
+  });
+  assert.equal(login.status, 200);
+  assert.equal((await login.json()).user.username, name);
+});
+
+test('registration rejects duplicates and weak input', async () => {
+  const name = `dupe${Date.now()}`;
+  assert.equal((await registerUser(name)).status, 201);
+  const again = await registerUser(name);
+  assert.equal(again.status, 400);
+  assert.match(again.body.error, /taken/i);
+
+  const weak = await registerUser(`weak${Date.now()}`, 'short');
+  assert.equal(weak.status, 400);
+  assert.match(weak.body.error, /8 characters/);
+});
+
+test('a bad login is refused', async () => {
+  const name = `bad${Date.now()}`;
+  await registerUser(name);
+  const res = await fetch(`${BASE}/api/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username: name, password: 'notthepassword' }),
+  });
+  assert.equal(res.status, 401);
+  assert.match((await res.json()).error, /incorrect/i);
+});
+
+test('the player endpoint never exposes credentials', async () => {
+  const name = `secret${Date.now()}`;
+  const created = await registerUser(name);
+  const res = await fetch(`${BASE}/api/player/${encodeURIComponent(created.body.user.id)}`);
+  const body = await res.json();
+  assert.equal(body.rating, 1200);
+  assert.equal('passwordHash' in body, false);
+  assert.equal('salt' in body, false);
+  assert.equal(JSON.stringify(body).includes('hunter2'), false);
+});
+
+test('a signed-in player is identified by the cookie, not the query string', async () => {
+  const name = `auth${Date.now()}`;
+  const account = await registerUser(name);
+  const id = await createGame([
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+  ]);
+
+  // Connect claiming a bogus pid; the session must win.
+  const params = new URLSearchParams({ game: id, pid: 'g:not-my-id', name: 'Impostor' });
+  const socket = new WebSocket(`ws://127.0.0.1:${PORT}/ws?${params}`, {
+    headers: { cookie: account.cookie },
+  });
+  const inbox = [];
+  socket.on('message', (raw) => inbox.push(JSON.parse(raw.toString())));
+  await once(socket, 'open');
+  await waitFor(inbox, (m) => m.t === 'welcome');
+  const state = await waitFor(inbox, (m) => m.t === 'state');
+  assert.equal(state.state.players.white.name, name, 'the account name is used');
+  socket.close();
+});
+
+test('an anonymous client cannot claim an account id', async () => {
+  const name = `victim${Date.now()}`;
+  const account = await registerUser(name);
+  const id = await createGame([
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+    { initial: 60, increment: 0 },
+  ]);
+
+  // No cookie, but claiming the account's player id outright.
+  const attacker = await joinAs(id, account.body.user.id, 'Impostor');
+  const state = await waitFor(attacker.inbox, (m) => m.t === 'state');
+  assert.notEqual(
+    state.state.players.white.name,
+    name,
+    'an unauthenticated client must not take over an account',
+  );
+  attacker.socket.close();
+
+  // ...and the account's rating is untouched by that game.
+  const after = await fetch(`${BASE}/api/player/${encodeURIComponent(account.body.user.id)}`);
+  assert.equal((await after.json()).games, 0);
 });
 
 test('the lobby and game routes both serve the app shell', async () => {

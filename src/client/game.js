@@ -78,6 +78,10 @@ export function renderGame(root, gameId) {
           <button type="button" class="btn btn-sm" id="sound" title="Toggle sound">Sound on</button>
           <button type="button" class="btn btn-sm" id="draw">Offer draw</button>
           <button type="button" class="btn btn-sm btn-danger" id="resign">Resign</button>
+          <!-- Swapped in once the game is over, so dismissing the result card
+               never strands the rematch. -->
+          <button type="button" class="btn btn-sm btn-primary" id="rematch-ctl" hidden>Rematch</button>
+          <a class="btn btn-sm" id="newgame-ctl" href="/" hidden>New game</a>
         </div>
       </aside>
     </div>
@@ -112,6 +116,7 @@ export function renderGame(root, gameId) {
   let lastHistoryLength = 0;
   let lastStatus = null;
   let resignArmed = false;
+  let overlayDismissed = false;
 
   // Review: `frames` is the whole game rebuilt ply by ply. `ply` is null when
   // following the live position, otherwise the frame being examined.
@@ -326,6 +331,12 @@ export function renderGame(root, gameId) {
     }
 
     if (state.status === 'finished') {
+      // Dismissed by the player so they can look at the board underneath.
+      if (overlayDismissed) {
+        overlay.hidden = true;
+        overlay.innerHTML = '';
+        return;
+      }
       overlay.hidden = false;
       const reason = REASON_TEXT[state.reason] ?? state.reason ?? '';
       const resultLine =
@@ -340,6 +351,8 @@ export function renderGame(root, gameId) {
         : '';
       overlay.innerHTML = `
         <div class="overlay-card">
+          <button type="button" class="overlay-close" id="dismiss" title="Close and review the game"
+                  aria-label="Close">&times;</button>
           <h3>${resultLine}</h3>
           <p class="overlay-note">${reason} · ${state.result}</p>
           ${ratingLine}
@@ -355,6 +368,10 @@ export function renderGame(root, gameId) {
       `;
       overlay.querySelector('#rematch')?.addEventListener('click', () => {
         connection.send({ t: 'rematch' });
+      });
+      overlay.querySelector('#dismiss')?.addEventListener('click', () => {
+        overlayDismissed = true;
+        renderOverlay();
       });
       return;
     }
@@ -395,6 +412,15 @@ export function renderGame(root, gameId) {
 
   function renderControls() {
     const playing = Boolean(myColor) && state?.status === 'active';
+    const finished = state?.status === 'finished';
+
+    // Once the game is over, the in-game actions give way to what you would
+    // actually want next — so closing the result card loses nothing.
+    controlsEl.querySelector('#draw').hidden = finished;
+    controlsEl.querySelector('#resign').hidden = finished;
+    controlsEl.querySelector('#rematch-ctl').hidden = !finished || !myColor;
+    controlsEl.querySelector('#newgame-ctl').hidden = !finished;
+
     controlsEl.querySelector('#draw').disabled = !playing;
     const resignBtn = controlsEl.querySelector('#resign');
     resignBtn.disabled = !playing;
@@ -482,6 +508,10 @@ export function renderGame(root, gameId) {
       ArrowRight: () => goTo(at() + 1),
       Home: () => goTo(0),
       End: () => goTo(null),
+      Escape: () => {
+        overlayDismissed = true;
+        renderOverlay();
+      },
     };
     const action = keys[event.key];
     if (!action) return;
@@ -499,6 +529,7 @@ export function renderGame(root, gameId) {
   });
 
   el('draw').addEventListener('click', () => connection.send({ t: 'offer-draw' }));
+  el('rematch-ctl').addEventListener('click', () => connection.send({ t: 'rematch' }));
 
   // Resignation is one click away from throwing the game, so make it two.
   const resignButton = el('resign');

@@ -7,6 +7,14 @@ import { sanitizeClocks } from '../shared/tc.js';
 import { Rooms, makeToken } from './rooms.js';
 import { Pool } from './pool.js';
 import { Ratings, sanitizeName } from './ratings.js';
+import {
+  Accounts,
+  parseCookies,
+  sessionCookie,
+  clearedCookie,
+  SESSION_COOKIE,
+  isGuestId,
+} from './accounts.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, '..', '..', 'public');
@@ -17,8 +25,25 @@ const HEARTBEAT_MS = 25000; // keep proxies (Railway included) from idling us ou
 
 const app = express();
 const ratings = new Ratings();
+const accounts = new Accounts(ratings);
 const rooms = new Rooms(ratings);
 const pool = new Pool(rooms);
+
+// Railway terminates TLS in front of us, so trust its forwarding headers when
+// deciding whether the session cookie may be marked Secure.
+app.set('trust proxy', 1);
+const isSecure = (req) => req.secure || req.get('x-forwarded-proto') === 'https';
+
+/** The account id proved by the request's session cookie, if any. */
+function sessionId(req) {
+  const cookies = parseCookies(req.headers?.cookie);
+  return accounts.verifyToken(cookies[SESSION_COOKIE]);
+}
+
+function publicUser(id) {
+  const record = ratings.peek(id);
+  return { id, username: record.username, rating: record.rating, games: record.games, provisional: record.provisional };
+}
 
 app.disable('x-powered-by');
 app.use(express.json({ limit: '8kb' }));
@@ -41,6 +66,32 @@ app.post('/api/games', (req, res) => {
   const clocks = sanitizeClocks(req.body?.clocks);
   const game = rooms.create(clocks);
   res.status(201).json({ id: game.id, clocks: game.spec });
+});
+
+// --- accounts --------------------------------------------------------------
+
+app.post('/api/register', (req, res) => {
+  const result = accounts.register(req.body?.username, req.body?.password);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.setHeader('Set-Cookie', sessionCookie(accounts.issueToken(result.id), { secure: isSecure(req) }));
+  res.status(201).json({ user: publicUser(result.id) });
+});
+
+app.post('/api/login', (req, res) => {
+  const result = accounts.login(req.body?.username, req.body?.password, req.ip);
+  if (result.error) return res.status(401).json({ error: result.error });
+  res.setHeader('Set-Cookie', sessionCookie(accounts.issueToken(result.id), { secure: isSecure(req) }));
+  res.json({ user: publicUser(result.id) });
+});
+
+app.post('/api/logout', (req, res) => {
+  res.setHeader('Set-Cookie', clearedCookie({ secure: isSecure(req) }));
+  res.json({ ok: true });
+});
+
+app.get('/api/me', (req, res) => {
+  const id = sessionId(req);
+  res.json({ user: id ? publicUser(id) : null });
 });
 
 app.get('/api/leaderboard', (_req, res) => res.json({ players: ratings.leaderboard(10) }));
@@ -146,8 +197,16 @@ wss.on('connection', (socket, req) => {
   // rated. The identity is only recorded once, so a later joiner cannot
   // overwrite whoever actually played the game.
   if (color) {
-    const playerId = url.searchParams.get('pid');
-    const playerName = sanitizeName(url.searchParams.get('name'));
+    // A signed session always wins. Only when there is none do we fall back to
+    // the client-supplied guest id — and it must carry the guest prefix, so an
+    // anonymous client can never claim an account's identity or its rating.
+    const authenticated = accounts.verifyToken(parseCookies(req.headers?.cookie)[SESSION_COOKIE]);
+    const claimed = url.searchParams.get('pid');
+    const playerId = authenticated ?? (isGuestId(claimed) ? claimed : null);
+    const playerName = authenticated
+      ? ratings.peek(authenticated).username
+      : sanitizeName(url.searchParams.get('name'));
+
     if (playerId && !game.playerIds[color]) game.playerIds[color] = playerId;
     if (playerName) game.playerNames[color] = playerName;
     const record = ratings.get(game.playerIds[color], game.playerNames[color]);

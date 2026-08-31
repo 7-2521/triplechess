@@ -50,6 +50,7 @@ export class Ratings {
     this.persist = dir !== null;
     this.file = this.persist ? path.join(dir, 'ratings.json') : null;
     this.players = new Map();
+    this.secret = null; // HMAC key for session tokens, generated on first use
     this.saveTimer = null;
     this.load();
   }
@@ -59,6 +60,7 @@ export class Ratings {
     try {
       if (!existsSync(this.file)) return;
       const raw = JSON.parse(readFileSync(this.file, 'utf8'));
+      this.secret = raw.secret ?? null;
       for (const [id, player] of Object.entries(raw.players ?? {})) {
         this.players.set(id, {
           name: player.name ?? null,
@@ -67,6 +69,12 @@ export class Ratings {
           wins: Number(player.wins) || 0,
           losses: Number(player.losses) || 0,
           draws: Number(player.draws) || 0,
+          // Account fields, absent for guests.
+          username: player.username ?? null,
+          usernameLower: player.usernameLower ?? null,
+          salt: player.salt ?? null,
+          passwordHash: player.passwordHash ?? null,
+          createdAt: player.createdAt ?? null,
         });
       }
       console.log(`Loaded ratings for ${this.players.size} players`);
@@ -79,7 +87,7 @@ export class Ratings {
     if (!this.persist) return;
     try {
       mkdirSync(this.dir, { recursive: true });
-      const payload = { players: Object.fromEntries(this.players) };
+      const payload = { secret: this.secret ?? null, players: Object.fromEntries(this.players) };
       const tmp = `${this.file}.tmp`;
       writeFileSync(tmp, JSON.stringify(payload));
       renameSync(tmp, this.file); // atomic swap so a crash cannot truncate it
@@ -156,13 +164,25 @@ export class Ratings {
     return game.ratingChange;
   }
 
-  /** Read a rating without creating a record for someone who never played. */
+  /**
+   * Read a rating without creating a record for someone who never played.
+   * Only public fields are returned — credentials must never leave here.
+   */
   peek(id) {
     const player = this.players.get(id);
     if (!player) {
       return { rating: START_RATING, games: 0, wins: 0, losses: 0, draws: 0, provisional: true };
     }
-    return { ...player, provisional: player.games < PROVISIONAL_GAMES };
+    return {
+      name: player.username ?? player.name ?? null,
+      username: player.username ?? null,
+      rating: player.rating,
+      games: player.games,
+      wins: player.wins,
+      losses: player.losses,
+      draws: player.draws,
+      provisional: player.games < PROVISIONAL_GAMES,
+    };
   }
 
   leaderboard(limit = 10) {
@@ -170,6 +190,11 @@ export class Ratings {
       .filter((p) => p.games > 0)
       .sort((x, y) => y.rating - x.rating)
       .slice(0, limit)
-      .map((p) => ({ name: p.name ?? 'Anonymous', rating: p.rating, games: p.games }));
+      .map((p) => ({
+        name: p.username ?? p.name ?? 'Anonymous',
+        registered: Boolean(p.username),
+        rating: p.rating,
+        games: p.games,
+      }));
   }
 }

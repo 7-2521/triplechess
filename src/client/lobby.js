@@ -58,11 +58,8 @@ export function renderLobby(root) {
           Standard chess, three clocks each. Your clock rotates every move &mdash;
           so every third move you are playing a different time control.
         </p>
-        <div class="identity">
-          <label for="player-name">Playing as</label>
-          <input type="text" id="player-name" maxlength="20" value="${identity.name}" />
-          <span class="rating-chip" id="my-rating">&mdash;</span>
-        </div>
+        <div class="identity" id="identity"></div>
+        <div class="auth-panel" id="auth-panel" hidden></div>
       </header>
 
       <section class="panel">
@@ -206,10 +203,123 @@ export function renderLobby(root) {
     if (seeking) stopSeeking();
   });
 
-  el('player-name').addEventListener('change', (event) => {
-    const updated = setName(event.target.value);
-    event.target.value = updated.name;
-  });
+  // --- identity: guest name, or a signed-in account ------------------------
+
+  let account = null; // { username, rating, provisional, games }
+
+  function renderIdentity() {
+    const box = el('identity');
+    if (account) {
+      box.innerHTML = `
+        <span class="signed-in">Signed in as <strong>${account.username}</strong></span>
+        <span class="rating-chip" title="${account.games} rated game${account.games === 1 ? '' : 's'}">
+          ${account.rating}${account.provisional ? '?' : ''}
+        </span>
+        <button type="button" class="btn btn-sm" id="logout">Log out</button>
+      `;
+      box.querySelector('#logout').addEventListener('click', logout);
+      el('auth-panel').hidden = true;
+      return;
+    }
+    box.innerHTML = `
+      <label for="player-name">Playing as</label>
+      <input type="text" id="player-name" maxlength="20" value="${identity.name}" />
+      <span class="rating-chip" id="my-rating">&mdash;</span>
+      <button type="button" class="btn btn-sm" id="show-auth">Sign in</button>
+    `;
+    box.querySelector('#player-name').addEventListener('change', (event) => {
+      const updated = setName(event.target.value);
+      event.target.value = updated.name;
+    });
+    box.querySelector('#show-auth').addEventListener('click', () => {
+      const panel = el('auth-panel');
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) panel.querySelector('input')?.focus();
+    });
+    refreshGuestRating();
+  }
+
+  function renderAuthPanel() {
+    el('auth-panel').innerHTML = `
+      <form class="auth-form" id="auth-form">
+        <p class="auth-note">
+          An account keeps your rating across browsers and devices.
+          Guests can play without one.
+        </p>
+        <div class="auth-row">
+          <input type="text" id="auth-user" placeholder="Username" autocomplete="username"
+                 maxlength="20" required />
+          <input type="password" id="auth-pass" placeholder="Password" maxlength="200"
+                 autocomplete="current-password" required />
+        </div>
+        <div class="auth-actions">
+          <button type="submit" class="btn btn-primary btn-sm" id="do-login">Log in</button>
+          <button type="button" class="btn btn-sm" id="do-register">Create account</button>
+        </div>
+        <p class="auth-error" id="auth-error" hidden></p>
+      </form>
+    `;
+    const panel = el('auth-panel');
+    const authError = panel.querySelector('#auth-error');
+    const showAuthError = (message) => {
+      authError.textContent = message;
+      authError.hidden = !message;
+    };
+
+    const submit = async (path) => {
+      showAuthError('');
+      const username = panel.querySelector('#auth-user').value.trim();
+      const password = panel.querySelector('#auth-pass').value;
+      try {
+        const res = await fetch(path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ username, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) return showAuthError(data.error || 'That did not work.');
+        account = data.user;
+        renderIdentity();
+        // Re-seek under the new identity if we were already queueing.
+        if (seeking) {
+          stopSeeking();
+          startSeeking();
+        }
+      } catch {
+        showAuthError('Could not reach the server.');
+      }
+    };
+
+    panel.querySelector('#auth-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      submit('/api/login');
+    });
+    panel.querySelector('#do-register').addEventListener('click', () => submit('/api/register'));
+  }
+
+  async function logout() {
+    try {
+      await fetch('/api/logout', { method: 'POST' });
+    } catch {
+      /* ignore — the cookie is cleared server-side on the next try */
+    }
+    account = null;
+    renderIdentity();
+  }
+
+  function refreshGuestRating() {
+    const chip = root.querySelector('#my-rating');
+    if (!chip) return;
+    fetch(`/api/player/${encodeURIComponent(identity.id)}`)
+      .then((r) => r.json())
+      .then((me) => {
+        chip.textContent = `${me.rating}${me.provisional ? '?' : ''}`;
+        chip.title = `${me.games} rated game${me.games === 1 ? '' : 's'}`;
+      })
+      .catch(() => {
+        chip.textContent = '1200?';
+      });
+  }
 
   // --- matchmaking ---------------------------------------------------------
 
@@ -304,16 +414,18 @@ export function renderLobby(root) {
     location.assign(`/g/${encodeURIComponent(code)}`);
   });
 
-  // Show our own rating. A "?" marks a provisional rating, as lichess does.
-  fetch(`/api/player/${encodeURIComponent(identity.id)}`)
+  // Pick up an existing session before drawing the identity strip.
+  renderAuthPanel();
+  renderIdentity();
+  fetch('/api/me')
     .then((r) => r.json())
-    .then((me) => {
-      el('my-rating').textContent = `${me.rating}${me.provisional ? '?' : ''}`;
-      el('my-rating').title = `${me.games} rated game${me.games === 1 ? '' : 's'}`;
+    .then((data) => {
+      if (data.user) {
+        account = data.user;
+        renderIdentity();
+      }
     })
-    .catch(() => {
-      el('my-rating').textContent = '1200?';
-    });
+    .catch(() => {});
 
   drawEditor();
   renderPool([]);
